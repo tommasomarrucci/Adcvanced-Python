@@ -60,6 +60,35 @@ class SimulatorTests(unittest.TestCase):
             for metric in ("revenue", "cost_of_goods_sold", "gross_profit"):
                 self.assertAlmostEqual(actual_row[metric], float(expected_row[metric]), places=2)
 
+    def test_each_invalid_sales_sample_is_rejected(self):
+        project = Path(__file__).resolve().parents[1]
+        settings = load_config(project / "inventory_student_sample_files/config/storage.toml")
+        invalid_files = (
+            "sales_negative_quantity.csv",
+            "sales_missing_day.csv",
+            "sales_duplicate_pair.csv",
+            "sales_unknown_product.csv",
+        )
+        for filename in invalid_files:
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as directory:
+                with connect(Path(directory) / "db.sqlite") as connection:
+                    errors = import_data(connection, settings.products_path,
+                        project / "inventory_student_sample_files/validation" / filename, settings.capacity)
+                    self.assertTrue(errors)
+                    self.assertEqual(connection.execute("SELECT COUNT(*) FROM historical_sales").fetchone()[0], 0)
+
+    def test_invalid_product_and_config_samples_are_rejected(self):
+        project = Path(__file__).resolve().parents[1]
+        settings = load_config(project / "inventory_student_sample_files/config/storage.toml")
+        invalid_products = project / "inventory_student_sample_files/validation/products_zero_cost.csv"
+        with tempfile.TemporaryDirectory() as directory:
+            with connect(Path(directory) / "db.sqlite") as connection:
+                errors = import_data(connection, invalid_products, settings.sales_path, settings.capacity)
+                self.assertTrue(errors)
+                self.assertEqual(connection.execute("SELECT COUNT(*) FROM historical_sales").fetchone()[0], 0)
+        with self.assertRaises(ValueError):
+            load_config(project / "inventory_student_sample_files/validation/invalid_config.toml")
+
 
 if __name__ == "__main__":
     unittest.main()
