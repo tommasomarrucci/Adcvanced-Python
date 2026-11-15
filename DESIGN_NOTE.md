@@ -12,4 +12,12 @@ ChatGPT assisted with the application structure, implementation, documentation, 
 
 ## Contribution statement
 
-Before submission, add each member's name and concrete implementation contribution, identify who reviewed whose work, and record shared design decisions. Do not claim contributions that did not occur. Every member should contribute to implementation and review another member's work.
+| Member | Substantive implementation contribution | Review performed |
+|---|---|---|
+| PIETRO NICOLAZZI | To be completed by the group | To be completed by the group |
+| NICOLA RIZZUTO | To be completed by the group | To be completed by the group |
+| MAIA TRUBIANO | To be completed by the group | To be completed by the group |
+| TOMMASO MARRUCCI | To be completed by the group | To be completed by the group |
+| HADRIEN RAYMOND JULIEN GIRAL--GHATTAS | To be completed by the group | To be completed by the group |
+
+Add shared design decisions below, and replace each placeholder with work that the named member actually completed. Do not claim contributions that did not occur. Every member should contribute to implementation and review another member's work.
