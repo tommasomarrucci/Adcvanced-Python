@@ -8,8 +8,8 @@ Monetary input values are parsed as EUR floating-point values and CSV outputs ro
 
 ## AI-use statement
 
-An AI assistant generated an initial application structure and implementation. The group must review and correct the code, verify the calculations and outputs against the handout and supplied expected historical summaries, and be able to explain all submitted work in the oral examination. Replace this paragraph with the group's actual tools, review process, and one concrete correction made before submission.
+ChatGPT assisted with the application structure, implementation, documentation, and presentation outline. The generated code was run against the supplied data and checked with seven automated tests, including the provided expected historical summaries and invalid-input samples. During execution, the group corrected a simulation defect where sales were not carried forward into the next day's stock, and fixed repeat-run persistence to delete daily records before their parent run. The group should edit this statement to match its actual review and use of AI, and be prepared to explain and independently verify the submitted code.
 
 ## Contribution statement
 
-Complete this section with each member's substantive implementation contribution, code review, and shared design decisions. Every member should contribute to implementation and review another member's work.
+Before submission, add each member's name and concrete implementation contribution, identify who reviewed whose work, and record shared design decisions. Do not claim contributions that did not occur. Every member should contribute to implementation and review another member's work.
