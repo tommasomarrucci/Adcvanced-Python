@@ -44,7 +44,8 @@ For the core comparison without the storage limit use `config/core.toml`. The
 `promotion.toml` and `policy_tuning.toml` files belong to the extensions we did not
 choose; the program rejects them with a clear message.
 
-Exit codes: 0 success, 1 invalid input data or a file/database error, 2 invalid configuration.
+Exit codes: 0 success, 1 invalid input data or a file/database error, 2 invalid configuration
+or a command line that cannot be understood. `--help` lists the commands.
 
 ## Commands
 
@@ -104,11 +105,16 @@ Mean daily units are rounded to 8 decimals.
 ## Tests
 
 ```sh
-python -m unittest discover -s tests -b
+python -m tests.run_tests
 ```
+
+Each test is a plain function that uses `assert`, as in the course exercises; the
+script runs them all and prints `ok` or `FAIL` for each. A single file can be run on its
+own too, for example `python -m tests.test_simulation`.
 
 58 tests: a 4-day example calculated by hand, stock conservation, non-negative stock,
 the next-morning arrival of orders, storage capacity on every day and at its boundary,
 reproducibility, every invalid sample file, invalid configurations, repeated and
 conflicting imports, a product with no demand, and agreement between the SQL totals and
-the NumPy engine. The tests use temporary folders and never touch the submitted database.
+the NumPy engine, and the parsing of the command line. The tests use temporary folders and
+never touch the submitted database.

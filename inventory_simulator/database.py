@@ -1,8 +1,9 @@
 """SQLite storage: the schema, imports, saving runs and all SQL summaries.
 
-Money columns end in _cents and hold integers. Open the database with
-`with closing(connect(path)) as connection:` so it is always closed, and wrap
-changes in `with connection:` so they are committed together or rolled back.
+Money columns end in _cents and hold integers. Whoever opens the database with
+connect() closes it with connection.close() inside a finally block, so it is closed
+even after an error. Changes are wrapped in `with connection:` so they are committed
+together or rolled back.
 """
 
 import sqlite3

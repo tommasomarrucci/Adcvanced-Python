@@ -5,7 +5,7 @@ column i is product i of the Catalogue. The engine loops over days, because toda
 stock depends on yesterday's, but each day updates all products at once.
 """
 
-from typing import NamedTuple
+from collections import namedtuple
 
 import numpy as np
 
@@ -51,11 +51,8 @@ class Catalogue:
         return self.price_cents - self.cost_cents
 
 
-class StorageLimit(NamedTuple):
-    """Storage extension settings for one run: total capacity and allocation rule."""
-
-    capacity: int
-    rule: str
+# Storage extension settings for one run: total capacity and allocation rule.
+StorageLimit = namedtuple("StorageLimit", ["capacity", "rule"])
 
 
 def generate_demand(mean_demand: np.ndarray, days: int, seed: int) -> np.ndarray:
@@ -74,12 +71,19 @@ def generate_demand(mean_demand: np.ndarray, days: int, seed: int) -> np.ndarray
 def allocation_priority(catalogue: Catalogue, rule: str) -> list[int]:
     """Product positions in the order they get storage space under `rule`."""
     positions = range(len(catalogue))
+    margins = catalogue.unit_margins()
+
+    def by_product_id(i: int) -> str:
+        return catalogue.product_ids[i]
+
+    def by_margin(i: int) -> tuple:
+        # Highest margin first (hence the minus); equal margins fall back to product id.
+        return (-margins[i], catalogue.product_ids[i])
+
     if rule == "product_id_ascending":
-        return sorted(positions, key=lambda i: catalogue.product_ids[i])
+        return sorted(positions, key=by_product_id)
     if rule == "unit_margin_descending":
-        margins = catalogue.unit_margins()
-        # Highest margin first; equal margins fall back to ascending product id.
-        return sorted(positions, key=lambda i: (-margins[i], catalogue.product_ids[i]))
+        return sorted(positions, key=by_margin)
     raise ValueError(f"unknown allocation rule {rule!r}")
 
 

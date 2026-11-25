@@ -6,9 +6,9 @@ so the user can fix them all in one go. No problems means the data can be import
 """
 
 import csv
+from collections import namedtuple
 from datetime import date, timedelta
 from pathlib import Path
-from typing import NamedTuple
 
 from .money import to_cents
 
@@ -19,25 +19,17 @@ MIN_HISTORY_DAYS = 30
 MAX_LISTED_GAPS = 10  # how many missing product-date pairs to spell out in the report
 
 
-class ProductRecord(NamedTuple):
-    product_id: str
-    name: str
-    category: str
-    purchase_cost_cents: int
-    selling_price_cents: int
-    initial_stock: int
+# One checked row of products.csv, with money already in cents.
+ProductRecord = namedtuple("ProductRecord", [
+    "product_id", "name", "category", "purchase_cost_cents", "selling_price_cents",
+    "initial_stock",
+])
 
+# One checked row of historical_sales.csv. sale_date is a YYYY-MM-DD string.
+SaleRecord = namedtuple("SaleRecord", ["sale_date", "product_id", "units_sold"])
 
-class SaleRecord(NamedTuple):
-    sale_date: str  # ISO format, YYYY-MM-DD
-    product_id: str
-    units_sold: int
-
-
-class ValidatedInput(NamedTuple):
-    products: list[ProductRecord]
-    sales: list[SaleRecord]
-    problems: list[str]
+# Everything validate_inputs found: the good records and the list of problems.
+ValidatedInput = namedtuple("ValidatedInput", ["products", "sales", "problems"])
 
 
 # --- single values ------------------------------------------------------------
@@ -65,7 +57,7 @@ def parse_iso_date(text: str) -> date:
     try:
         parsed = date.fromisoformat(cleaned)
     except ValueError:
-        raise ValueError(f"must be a valid YYYY-MM-DD date, got {text!r}") from None
+        raise ValueError(f"must be a valid YYYY-MM-DD date, got {text!r}")
     # fromisoformat also accepts other ISO forms such as "20260101".
     if parsed.isoformat() != cleaned:
         raise ValueError(f"must be written as YYYY-MM-DD, got {text!r}")
@@ -77,7 +69,7 @@ def _field(row: dict[str, str], column: str, parser):
     try:
         return parser(row[column])
     except ValueError as error:
-        raise ValueError(f"{column} {error}") from None
+        raise ValueError(f"{column} {error}")
 
 
 def _check_row_shape(row: dict) -> None:

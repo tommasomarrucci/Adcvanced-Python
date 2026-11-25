@@ -6,26 +6,34 @@ floats do (0.1 + 0.2 == 0.30000000000000004). We convert to cents once, when
 reading input, and back to euros only when writing output.
 """
 
-from decimal import Decimal, InvalidOperation
-
 
 def to_cents(value: str | int | float) -> int:
     """Convert a euro amount such as "1.20" or 0.02 into integer cents.
 
+    The amount is read as text and split at the decimal point, so no float
+    arithmetic is involved: "0.07" becomes 0 euros and 7 cents.
     Raises ValueError if the value is not a number or has more than two decimals.
     """
-    try:
-        # Going through str() means the float 0.07 becomes Decimal("0.07")
-        # instead of 0.07000000000000000666...
-        amount = Decimal(str(value).strip())
-    except InvalidOperation:
-        raise ValueError(f"must be a number, got {value!r}") from None
-    if not amount.is_finite():
-        raise ValueError(f"must be a finite number, got {value!r}")
-    cents = amount * 100
-    if cents != cents.to_integral_value():
+    text = str(value).strip()
+    sign = 1
+    if text.startswith("-"):
+        sign = -1
+        text = text[1:]
+
+    if "." in text:
+        euros, decimals = text.split(".", 1)
+    else:
+        euros, decimals = text, ""
+
+    # Both parts may only contain digits, and at least one must be non-empty.
+    if (euros and not euros.isdigit()) or (decimals and not decimals.isdigit()) \
+            or (not euros and not decimals):
+        raise ValueError(f"must be a number, got {value!r}")
+    if len(decimals) > 2:
         raise ValueError(f"must have at most two decimal places, got {value!r}")
-    return int(cents)
+
+    decimals = decimals.ljust(2, "0")  # "5" -> "50", "" -> "00"
+    return sign * (int(euros or "0") * 100 + int(decimals))
 
 
 def format_eur(cents: int) -> str:

@@ -2,13 +2,15 @@
 
 import csv
 from pathlib import Path
-from typing import Mapping
 
 from .config import Settings
 from .money import format_eur
 
 
-def to_output_row(row: Mapping) -> dict[str, object]:
+# Database rows are sqlite3.Row objects: they work like dictionaries, row["policy"].
+
+
+def to_output_row(row) -> dict[str, object]:
     """Prepare a database row for CSV output.
 
     Columns ending in _cents become _eur columns with two decimals, and a missing
@@ -75,14 +77,8 @@ def _eur(cents: int) -> str:
     return f"EUR {format_eur(cents)}"
 
 
-def build_report(
-    settings: Settings,
-    window: Mapping,
-    categories: list[Mapping],
-    shop_rows: list[Mapping],
-    product_rows: list[Mapping],
-    saved: list[Mapping],
-) -> str:
+def build_report(settings: Settings, window, categories: list, shop_rows: list,
+                 product_rows: list, saved: list) -> str:
     """Return the text of report.txt."""
     storage = settings.extension == "storage"
     lines = [
@@ -161,7 +157,15 @@ def build_report(
     return "\n".join(lines) + "\n"
 
 
-def _storage_comparison(shop_rows: list[Mapping], product_rows: list[Mapping]) -> list[str]:
+def _lost_sales(row) -> int:
+    return row["lost_sales"]
+
+
+def _operating_result(row) -> int:
+    return row["operating_result_cents"]
+
+
+def _storage_comparison(shop_rows: list, product_rows: list) -> list[str]:
     lines = []
     margin_rule_lost_more = True
     policies = sorted({row["policy"] for row in shop_rows})
@@ -169,17 +173,15 @@ def _storage_comparison(shop_rows: list[Mapping], product_rows: list[Mapping]) -
         runs = [row for row in shop_rows if row["policy"] == policy]
         lines.append(f"{policy}:")
         for row in runs:
-            worst = max(
-                (p for p in product_rows if p["run_id"] == row["run_id"]),
-                key=lambda p: p["lost_sales"],
-            )
+            products_of_run = [p for p in product_rows if p["run_id"] == row["run_id"]]
+            worst = max(products_of_run, key=_lost_sales)
             lines.append(
                 f"   {row['allocation_rule']:<23} operating {_eur(row['operating_result_cents'])}, "
                 f"lost {row['lost_sales']} units (most: {worst['product_id']}, "
                 f"{worst['lost_sales']})"
             )
-        best = max(runs, key=lambda row: row["operating_result_cents"])
-        worst_run = min(runs, key=lambda row: row["operating_result_cents"])
+        best = max(runs, key=_operating_result)
+        worst_run = min(runs, key=_operating_result)
         gap = best["operating_result_cents"] - worst_run["operating_result_cents"]
         lines.append(f"   -> {best['allocation_rule']} is better by {_eur(gap)}.")
         lost = {row["allocation_rule"]: row["lost_sales"] for row in runs}
@@ -194,8 +196,8 @@ def _storage_comparison(shop_rows: list[Mapping], product_rows: list[Mapping]) -
     return lines
 
 
-def _recommendation(shop_rows: list[Mapping], policies: dict) -> list[str]:
-    ranked = sorted(shop_rows, key=lambda row: row["operating_result_cents"], reverse=True)
+def _recommendation(shop_rows: list, policies: dict) -> list[str]:
+    ranked = sorted(shop_rows, key=_operating_result, reverse=True)
     best = ranked[0]
     lines = [
         f"Use {policies[best['policy']]}"

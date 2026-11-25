@@ -5,7 +5,7 @@
 Each module does one job, and only `cli.py` knows about the command line.
 
 ```
-cli.py         parse arguments, call the workflow, print, choose the exit code
+cli.py         read the command-line words (a list), call the workflow, print, exit code
 workflow.py    the steps of each command: validate -> import -> simulate -> save -> export
 config.py      read the TOML file, check every section, key, type and value -> Settings
 validation.py  read the CSV files and check them -> records + list of problems (no database)
@@ -53,12 +53,13 @@ inherits from `ValueError`.
 |---|---|---|
 | `products` | `product_id` | prices and costs in cents, `CHECK` > 0; stock `CHECK` >= 0 |
 | `historical_sales` | (`sale_date`, `product_id`) | foreign key to products; the key makes duplicate imports impossible |
-| `simulation_runs` | `run_id` | policy and its parameters, allocation rule, capacity, seed, days, RNG method, NumPy version, the full effective configuration as JSON |
+| `simulation_runs` | `run_id` | policy and its parameters, allocation rule, capacity, seed, days, RNG method, NumPy version, the full effective configuration as text |
 | `daily_results` | (`run_id`, `day`, `product_id`) | foreign keys to both tables, `ON DELETE CASCADE` from runs; `CHECK (units_sold + lost_sales = demand)` and `CHECK (stock_end = stock_start - units_sold)` |
 
 All values go through `?` or `:name` parameters. Imports and the saving of a whole
 comparison each run in a single transaction (`with connection:`), so a failure leaves
-nothing half-written. Connections are closed with `contextlib.closing`. The required
+nothing half-written. Connections are closed with `connection.close()` in a `finally`
+block, so they are closed even after an error. The required
 summaries are SQL queries: units and revenue by product, revenue by category (JOIN),
 best sellers in a date range (parameterised `BETWEEN`), saved runs, and the shop- and
 product-level results (`GROUP BY` over `daily_results`).
@@ -66,10 +67,15 @@ product-level results (`GROUP BY` over `daily_results`).
 ## Choice of Python types
 
 - **Integer cents** for every amount: sums are exact, so a total never comes out as
-  5517.699999999999. Input is converted with `Decimal`, which also rejects amounts like
-  1.234. Euros appear only in output, always with two decimals.
-- **Named tuples** (`ProductRecord`, `SaleRecord`, `Settings`) for fixed records: they
-  are immutable and are already tuples, so `executemany` can insert them directly.
+  5517.699999999999. Input such as "1.20" is split at the decimal point and turned into
+  1 * 100 + 20 cents, with no float arithmetic; amounts like 1.234 are rejected. Euros
+  appear only in output, always with two decimals.
+- **Named tuples** (`collections.namedtuple`: `ProductRecord`, `SaleRecord`, `Settings`)
+  for fixed records: they are immutable and are already tuples, so `executemany` can
+  insert them directly.
+- **The command line is a list**: `sys.argv[1:]` holds the words typed after the program
+  name. `parse_arguments` removes `--config FILE` (and `--limit N`) from the list, checks
+  the command and returns a dictionary; the tests call `main()` with their own lists.
 - **Sets** wherever uniqueness matters: seen product ids, (date, product) pairs, and
   missing or unknown config keys (`table.keys() - expected`).
 - **Dictionaries** for keyed lookups: the first row of each (date, product) pair, the
@@ -77,6 +83,17 @@ product-level results (`GROUP BY` over `daily_results`).
   in the CLI.
 - **Lists** keep product order fixed, so position i means the same product in every array.
 - **NumPy arrays** for everything (days x products) in the simulation.
+
+## Tools used beyond the lectures
+
+We kept to what the course covered (lists, dictionaries, sets, named tuples, classes,
+exceptions, `pathlib`, `sqlite3`, NumPy, plain `assert` tests). Three standard-library
+modules were needed by the specification itself:
+
+- `tomllib`: the configuration has to be a TOML file, and this is the standard reader.
+- `csv`: reads and writes the CSV files and handles quoting correctly.
+- `datetime.date`: checks that dates are real ISO dates (2026-02-30 is rejected) and
+  steps through the history day by day to find missing rows.
 
 ## Modelling assumptions
 
@@ -127,6 +144,13 @@ code in four places (`<` changed to `<=`, orders never arriving, holding cost ch
 start-of-day stock, `INSERT OR IGNORE` changed to `INSERT OR REPLACE`) and confirmed that
 the tests fail each time. Earlier, the group had corrected a generated defect where sales
 were not carried forward into the next day's stock.
+
+Finally, we compared the code with the lecture notebooks and asked Claude Code to replace
+the tools we had not covered in class (`argparse`, `unittest`, `typing.NamedTuple`,
+`contextlib.closing`, `json`, `Decimal`, `lambda`) with the course equivalents (a list
+from `sys.argv`, plain `assert` test functions, `collections.namedtuple`, `try/finally`
+with `connection.close()`, `str`, splitting the amount at the decimal point, named
+functions). We checked that every output file still has the same numbers to the cent.
 
 ## Contribution statement
 

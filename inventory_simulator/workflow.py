@@ -4,15 +4,14 @@ These functions take settings and an open database connection and do the work.
 They never read the command line or print, so tests can call them directly.
 """
 
-import json
 import sqlite3
+from collections import namedtuple
 from pathlib import Path
-from typing import NamedTuple
 
 import numpy as np
 
 from . import database
-from .config import Settings
+from .config import Settings, settings_as_text
 from .money import format_eur
 from .reporting import build_report, to_output_row, write_csv, write_validation_report
 from .simulation import RNG_METHOD, Catalogue, StorageLimit, generate_demand, simulate
@@ -28,15 +27,11 @@ class InvalidInputError(Exception):
         self.report_path = report_path
 
 
-class ImportSummary(NamedTuple):
-    products: int
-    new_sales: int
-    already_stored: int
+# How many products and sales rows an import stored, and how many it skipped.
+ImportSummary = namedtuple("ImportSummary", ["products", "new_sales", "already_stored"])
 
-
-class RunSummary(NamedTuple):
-    run_ids: list[str]
-    output_files: list[Path]
+# The ids of the runs that were saved and the files that were written.
+RunSummary = namedtuple("RunSummary", ["run_ids", "output_files"])
 
 
 def import_inputs(connection: sqlite3.Connection, settings: Settings) -> ImportSummary:
@@ -110,14 +105,14 @@ def run_comparison(connection: sqlite3.Connection, settings: Settings) -> RunSum
                     "run_id": run_id,
                     "scenario": settings.scenario,
                     "policy": policy.name,
-                    "policy_parameters": json.dumps(policy.parameters()),
+                    "policy_parameters": str(policy.parameters()),
                     "allocation_rule": rule,
                     "storage_capacity": settings.storage_capacity,
                     "days": settings.days,
                     "seed": settings.seed,
                     "rng_method": RNG_METHOD,
                     "numpy_version": np.__version__,
-                    "effective_config": settings.to_json(),
+                    "effective_config": settings_as_text(settings),
                 }
                 database.save_run(connection, run, catalogue.product_ids, result)
                 run_ids.append(run_id)

@@ -1,4 +1,8 @@
-"""Shared helpers for the tests: sample file paths and a temporary config writer."""
+"""Shared helpers for the tests: sample file paths, file writers and a tiny test runner.
+
+Every test is a plain function that uses assert. A test passes if it returns
+without raising anything.
+"""
 
 import csv
 from pathlib import Path
@@ -70,9 +74,46 @@ def write_config(folder: Path, name: str = "test.toml", **changes) -> Path:
     return path
 
 
-def write_csv(path: Path, header: list[str], rows: list[list[object]]) -> Path:
+def write_csv(path: Path, header: list[str], rows: list[list]) -> Path:
     with path.open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
         writer.writerow(header)
         writer.writerows(rows)
     return path
+
+
+def read_csv(path: Path) -> list[dict]:
+    with path.open(newline="", encoding="utf-8") as stream:
+        return list(csv.DictReader(stream))
+
+
+def must_raise(exctype, f, *args):
+    """Call f(*args) and check that it raises exctype. Returns the exception.
+
+    The same helper as in the L08 multiset exercise.
+    """
+    got_exc = None
+    try:
+        f(*args)
+    except exctype as exc:
+        got_exc = exc
+    if got_exc is None:
+        raise AssertionError(f"No exception raised, was expecting a {exctype.__name__}")
+    return got_exc
+
+
+def run_tests(tests: list) -> int:
+    """Call every test function, print ok or FAIL for each, and return the failures."""
+    failures = 0
+    for test in tests:
+        try:
+            test()
+        # Any exception means the test failed: a wrong assert (AssertionError) or a
+        # crash inside the code being tested. We report it and go on with the next test.
+        except Exception as error:
+            failures += 1
+            print(f"FAIL  {test.__name__}: {type(error).__name__}: {error}")
+        else:
+            print(f"ok    {test.__name__}")
+    print(f"\n{len(tests) - failures} of {len(tests)} tests passed")
+    return failures

@@ -1,9 +1,8 @@
 """Reading and validating the TOML configuration file."""
 
-import json
 import tomllib
+from collections import namedtuple
 from pathlib import Path
-from typing import Any, NamedTuple
 
 from .money import to_cents
 from .policies import FixedQuantityPolicy, OrderUpToPolicy, ReplenishmentPolicy
@@ -31,27 +30,29 @@ class ConfigError(ValueError):
     """The configuration file is missing, is not valid TOML, or has invalid values."""
 
 
-class Settings(NamedTuple):
-    """The validated configuration. Paths are absolute and money is in cents."""
+# The validated configuration. Paths are absolute and money is in cents.
+# scenario is the config file name without .toml, e.g. "storage".
+# storage_capacity is None when no extension is selected.
+Settings = namedtuple("Settings", [
+    "config_path", "scenario", "products_path", "sales_path", "database_path",
+    "output_dir", "days", "seed", "holding_cost_cents", "order_cost_cents",
+    "policies", "extension", "storage_capacity", "allocation_rules",
+])
 
-    config_path: Path
-    scenario: str  # the config file name without .toml, e.g. "storage"
-    products_path: Path
-    sales_path: Path
-    database_path: Path
-    output_dir: Path
-    days: int
-    seed: int
-    holding_cost_cents: int
-    order_cost_cents: int
-    policies: tuple[ReplenishmentPolicy, ...]
-    extension: str
-    storage_capacity: int | None
-    allocation_rules: tuple[str, ...]
 
-    def to_json(self) -> str:
-        """The effective configuration as JSON, stored with every simulation run."""
-        return json.dumps(self._asdict(), default=str, sort_keys=True)
+def settings_as_text(settings: Settings) -> str:
+    """The effective configuration as text, stored with every simulation run.
+
+    Paths and policies are turned into strings so the text is easy to read,
+    e.g. {'config_path': '/.../storage.toml', ..., 'seed': 2026, ...}.
+    """
+    values = settings._asdict()
+    for key in values:
+        if isinstance(values[key], Path):
+            values[key] = str(values[key])
+    values["policies"] = [str(policy) for policy in settings.policies]
+    values["allocation_rules"] = list(settings.allocation_rules)
+    return str(values)
 
 
 def load_config(path: str | Path) -> Settings:
@@ -140,19 +141,17 @@ def output_dir_if_known(path: str | Path) -> Path | None:
 # --- helpers ----------------------------------------------------------------
 
 
-def _read_toml(path: Path) -> dict[str, Any]:
+def _read_toml(path: Path) -> dict:
     try:
         with path.open("rb") as stream:
             return tomllib.load(stream)
     except FileNotFoundError:
-        raise ConfigError(f"configuration file not found: {path}") from None
+        raise ConfigError(f"configuration file not found: {path}")
     except tomllib.TOMLDecodeError as error:
-        raise ConfigError(f"{path.name} is not valid TOML: {error}") from None
+        raise ConfigError(f"{path.name} is not valid TOML: {error}")
 
 
-def _table(
-    parent: dict[str, Any], key: str, expected: set[str], label: str | None = None
-) -> dict[str, Any]:
+def _table(parent: dict, key: str, expected: set[str], label: str | None = None) -> dict:
     """Return parent[key] after checking it is a table with exactly the expected keys."""
     label = label or key
     table = parent.get(key)
@@ -167,7 +166,7 @@ def _table(
     return table
 
 
-def _integer(table: dict[str, Any], label: str, key: str) -> int:
+def _integer(table: dict, label: str, key: str) -> int:
     value = table[key]
     # bool is a subclass of int (True == 1), so "days = true" would otherwise pass.
     if isinstance(value, bool) or not isinstance(value, int):
@@ -175,27 +174,27 @@ def _integer(table: dict[str, Any], label: str, key: str) -> int:
     return value
 
 
-def _text(table: dict[str, Any], label: str, key: str) -> str:
+def _text(table: dict, label: str, key: str) -> str:
     value = table[key]
     if not isinstance(value, str):
         raise ConfigError(f"[{label}] {key} must be a string, got {value!r}")
     return value
 
 
-def _cents(table: dict[str, Any], label: str, key: str) -> int:
+def _cents(table: dict, label: str, key: str) -> int:
     value = table[key]
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ConfigError(f"[{label}] {key} must be a number, got {value!r}")
     try:
         cents = to_cents(value)
     except ValueError as error:
-        raise ConfigError(f"[{label}] {key} {error}") from None
+        raise ConfigError(f"[{label}] {key} {error}")
     if cents < 0:
         raise ConfigError(f"[{label}] {key} must be non-negative, got {value!r}")
     return cents
 
 
-def _policies(data: dict[str, Any]) -> tuple[ReplenishmentPolicy, ...]:
+def _policies(data: dict) -> tuple[ReplenishmentPolicy, ...]:
     policies = data.get("policies")
     if not isinstance(policies, dict):
         raise ConfigError("missing section [policies]")
@@ -219,10 +218,10 @@ def _policies(data: dict[str, Any]) -> tuple[ReplenishmentPolicy, ...]:
             OrderUpToPolicy(up_to_threshold, up_to_target),
         )
     except ValueError as error:
-        raise ConfigError(f"[policies] {error}") from None
+        raise ConfigError(f"[policies] {error}")
 
 
-def _storage_settings(storage: dict[str, Any]) -> tuple[int, tuple[str, ...]]:
+def _storage_settings(storage: dict) -> tuple[int, tuple[str, ...]]:
     capacity = _integer(storage, "storage", "capacity_units")
     if capacity <= 0:
         raise ConfigError(f"[storage] capacity_units must be positive, got {capacity}")

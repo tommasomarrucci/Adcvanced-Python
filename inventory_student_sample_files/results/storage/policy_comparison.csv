@@ -1,5 +1,5 @@
 run_id,policy,policy_parameters,allocation_rule,demand,units_sold,lost_sales,fulfilment_rate,revenue_eur,cogs_eur,gross_profit_eur,holding_cost_eur,ordering_cost_eur,operating_result_eur,final_stock,final_inventory_value_eur,outstanding_orders,gap_to_best_eur
-storage-seed2026-fixed_quantity-product_id_ascending,fixed_quantity,"{""threshold"": 20, ""quantity"": 40}",product_id_ascending,2655,2646,9,0.9966,5517.70,2363.70,3154.00,297.52,86.00,2770.48,263,592.30,0,4.52
-storage-seed2026-fixed_quantity-unit_margin_descending,fixed_quantity,"{""threshold"": 20, ""quantity"": 40}",unit_margin_descending,2655,2565,90,0.9661,5468.50,2347.20,3121.30,299.94,83.00,2738.36,275,740.50,25,36.64
-storage-seed2026-order_up_to-product_id_ascending,order_up_to,"{""threshold"": 20, ""target"": 60}",product_id_ascending,2655,2640,15,0.9944,5511.10,2361.00,3150.10,304.10,71.00,2775.00,263,568.80,0,0.00
-storage-seed2026-order_up_to-unit_margin_descending,order_up_to,"{""threshold"": 20, ""target"": 60}",unit_margin_descending,2655,2484,171,0.9356,5409.30,2325.70,3083.60,304.76,68.00,2710.84,263,532.40,37,64.16
+storage-seed2026-fixed_quantity-product_id_ascending,fixed_quantity,"{'threshold': 20, 'quantity': 40}",product_id_ascending,2655,2646,9,0.9966,5517.70,2363.70,3154.00,297.52,86.00,2770.48,263,592.30,0,4.52
+storage-seed2026-fixed_quantity-unit_margin_descending,fixed_quantity,"{'threshold': 20, 'quantity': 40}",unit_margin_descending,2655,2565,90,0.9661,5468.50,2347.20,3121.30,299.94,83.00,2738.36,275,740.50,25,36.64
+storage-seed2026-order_up_to-product_id_ascending,order_up_to,"{'threshold': 20, 'target': 60}",product_id_ascending,2655,2640,15,0.9944,5511.10,2361.00,3150.10,304.10,71.00,2775.00,263,568.80,0,0.00
+storage-seed2026-order_up_to-unit_margin_descending,order_up_to,"{'threshold': 20, 'target': 60}",unit_margin_descending,2655,2484,171,0.9356,5409.30,2325.70,3083.60,304.76,68.00,2710.84,263,532.40,37,64.16
