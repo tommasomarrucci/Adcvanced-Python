@@ -1,139 +1,195 @@
-"""Demand generation and inventory policy simulation."""
+"""Demand generation and the inventory simulation engine.
 
-from dataclasses import dataclass
-import sqlite3
-from abc import ABC, abstractmethod
-import uuid
+Everything is stored in NumPy arrays shaped (days, products): row d is day d+1 and
+column i is product i of the Catalogue. The engine loops over days, because today's
+stock depends on yesterday's, but each day updates all products at once.
+"""
+
+from typing import NamedTuple
 
 import numpy as np
 
-from .config import Settings
+from .policies import ReplenishmentPolicy
+
+RNG_METHOD = "numpy.random.default_rng (PCG64), poisson"
 
 
-@dataclass(frozen=True)
-class Product:
-    product_id: str
-    name: str
-    category: str
-    cost: float
-    price: float
-    initial_stock: int
-    mean_demand: float
+class Catalogue:
+    """The products being simulated, always in the same order.
+
+    Position i in every array refers to product_ids[i].
+    """
+
+    def __init__(
+        self,
+        product_ids: list[str],
+        price_cents: list[int],
+        cost_cents: list[int],
+        initial_stock: list[int],
+        mean_demand: list[float],
+    ) -> None:
+        self.product_ids = list(product_ids)
+        self.price_cents = np.array(price_cents, dtype=np.int64)
+        self.cost_cents = np.array(cost_cents, dtype=np.int64)
+        self.initial_stock = np.array(initial_stock, dtype=np.int64)
+        self.mean_demand = np.array(mean_demand, dtype=float)
+
+        n = len(self.product_ids)
+        if len(set(self.product_ids)) != n:
+            raise ValueError("product ids must be unique")
+        for array in (self.price_cents, self.cost_cents, self.initial_stock, self.mean_demand):
+            if array.shape != (n,):
+                raise ValueError("every product needs a price, cost, initial stock and mean")
+        if (self.initial_stock < 0).any() or (self.mean_demand < 0).any():
+            raise ValueError("initial stock and mean demand must be non-negative")
+
+    def __len__(self) -> int:
+        return len(self.product_ids)
+
+    def unit_margins(self) -> np.ndarray:
+        """Selling price minus purchase cost for each product, in cents."""
+        return self.price_cents - self.cost_cents
 
 
-class ReplenishmentPolicy(ABC):
-    name: str
+class StorageLimit(NamedTuple):
+    """Storage extension settings for one run: total capacity and allocation rule."""
 
-    @abstractmethod
-    def requested_order(self, stock: int) -> int:
-        raise NotImplementedError
-
-
-@dataclass(frozen=True)
-class FixedQuantityPolicy(ReplenishmentPolicy):
-    threshold: int
-    quantity: int
-    name: str = "fixed_quantity"
-
-    def requested_order(self, stock: int) -> int:
-        return self.quantity if stock < self.threshold else 0
+    capacity: int
+    rule: str
 
 
-@dataclass(frozen=True)
-class OrderUpToPolicy(ReplenishmentPolicy):
-    threshold: int
-    target: int
-    name: str = "order_up_to"
+def generate_demand(mean_demand: np.ndarray, days: int, seed: int) -> np.ndarray:
+    """Draw a (days, products) array of Poisson demand. Same seed, same array.
 
-    def requested_order(self, stock: int) -> int:
-        return self.target - stock if stock < self.threshold else 0
-
-
-def load_products(connection: sqlite3.Connection) -> list[Product]:
-    rows = connection.execute("""SELECT p.product_id,p.name,p.category,p.purchase_cost,p.selling_price,
-      p.initial_stock,AVG(h.units_sold) AS mean_demand FROM products p
-      JOIN historical_sales h USING(product_id) GROUP BY p.product_id ORDER BY p.product_id""").fetchall()
-    if not rows:
-        raise ValueError("No valid imported products and historical sales are available")
-    return [Product(row["product_id"], row["name"], row["category"], row["purchase_cost"], row["selling_price"], row["initial_stock"], row["mean_demand"]) for row in rows]
+    A Poisson draw is a whole number >= 0. Day to day it goes up and down around the
+    product's mean, and over many days it averages out to that mean, which is how
+    we picture "about 8 notebooks a day, sometimes 5, sometimes 12".
+    """
+    rng = np.random.default_rng(seed)
+    # lam has shape (products,) and is broadcast over the rows,
+    # so column i is drawn with product i's mean.
+    return rng.poisson(lam=mean_demand, size=(days, len(mean_demand)))
 
 
-def generate_demand(products: list[Product], days: int, seed: int) -> np.ndarray:
-    generator = np.random.default_rng(seed)
-    return np.stack([generator.poisson([product.mean_demand for product in products]) for _ in range(days)])
+def allocation_priority(catalogue: Catalogue, rule: str) -> list[int]:
+    """Product positions in the order they get storage space under `rule`."""
+    positions = range(len(catalogue))
+    if rule == "product_id_ascending":
+        return sorted(positions, key=lambda i: catalogue.product_ids[i])
+    if rule == "unit_margin_descending":
+        margins = catalogue.unit_margins()
+        # Highest margin first; equal margins fall back to ascending product id.
+        return sorted(positions, key=lambda i: (-margins[i], catalogue.product_ids[i]))
+    raise ValueError(f"unknown allocation rule {rule!r}")
 
 
-def simulate(connection: sqlite3.Connection, settings: Settings) -> tuple[list[dict], list[dict]]:
-    products = load_products(connection)
-    if settings.extension == "storage" and sum(product.initial_stock for product in products) > settings.capacity:
-        raise ValueError("Initial stock exceeds storage capacity")
-    policies: list[ReplenishmentPolicy] = [
-        FixedQuantityPolicy(settings.fixed_threshold, settings.fixed_quantity),
-        OrderUpToPolicy(settings.up_to_threshold, settings.up_to_target),
-    ]
-    rules = ["product_id_ascending", "unit_margin_descending"] if settings.extension == "storage" else ["unlimited"]
-    demand = generate_demand(products, settings.days, settings.seed)
-    daily_rows: list[dict] = []
-    aggregate_rows: list[dict] = []
-    for policy in policies:
-        for rule in rules:
-            run_id = f"{settings.seed}-{policy.name}-{rule}-{uuid.uuid5(uuid.NAMESPACE_URL, str(settings.config_path)).hex[:8]}"
-            stock = [p.initial_stock for p in products]
-            pending = [0] * len(products)
-            totals = {key: 0.0 for key in ("revenue", "cogs", "gross_profit", "holding_cost", "ordering_cost", "operating_result", "units_sold", "lost_sales", "demand")}
-            for day_index in range(settings.days):
-                stock = [stock[i] + pending[i] for i in range(len(products))]
-                pending = [0] * len(products)
-                start_stock = stock.copy()
-                sales = [min(int(demand[day_index, i]), stock[i]) for i in range(len(products))]
-                lost = [int(demand[day_index, i]) - sales[i] for i in range(len(products))]
-                end_stock = [stock[i] - sales[i] for i in range(len(products))]
-                requested = [policy.requested_order(qty) for qty in end_stock]
-                allocated = requested.copy()
-                if settings.extension == "storage":
-                    free_capacity = settings.capacity - sum(end_stock)
-                    order = list(range(len(products)))
-                    if rule == "unit_margin_descending":
-                        order.sort(key=lambda i: (-(products[i].price - products[i].cost), products[i].product_id))
-                    else:
-                        order.sort(key=lambda i: products[i].product_id)
-                    allocated = [0] * len(products)
-                    for i in order:
-                        allocated[i] = min(requested[i], max(0, free_capacity))
-                        free_capacity -= allocated[i]
-                for i, product in enumerate(products):
-                    revenue = sales[i] * product.price
-                    cogs = sales[i] * product.cost
-                    holding = end_stock[i] * settings.holding_cost
-                    ordering = settings.fixed_order_cost if allocated[i] > 0 else 0.0
-                    totals["revenue"] += revenue
-                    totals["cogs"] += cogs
-                    totals["gross_profit"] += revenue - cogs
-                    totals["holding_cost"] += holding
-                    totals["ordering_cost"] += ordering
-                    totals["units_sold"] += sales[i]
-                    totals["lost_sales"] += lost[i]
-                    totals["demand"] += int(demand[day_index, i])
-                    daily_rows.append({"run_id": run_id, "policy": policy.name, "allocation_rule": rule,
-                        "day": day_index + 1, "product_id": product.product_id, "stock_start": start_stock[i],
-                        "demand": int(demand[day_index, i]), "units_sold": sales[i], "lost_sales": lost[i],
-                        "order_quantity": allocated[i], "stock_end": end_stock[i], "revenue": revenue,
-                        "cogs": cogs, "gross_profit": revenue-cogs, "holding_cost": holding,
-                        "ordering_cost": ordering, "operating_result": revenue-cogs-holding-ordering})
-                pending = allocated
-                stock = end_stock
-                totals["operating_result"] = totals["gross_profit"] - totals["holding_cost"] - totals["ordering_cost"]
-            aggregate_rows.append({"run_id": run_id, "policy": policy.name, "allocation_rule": rule,
-                **totals, "fulfilment_rate": totals["units_sold"] / totals["demand"] if totals["demand"] else "N/A",
-                "final_stock": sum(stock), "outstanding_orders": sum(pending),
-                "final_inventory_value": sum(stock[i] * products[i].cost for i in range(len(products)))})
-    with connection:
-        for result in aggregate_rows:
-            connection.execute("DELETE FROM daily_simulation_results WHERE run_id = ?", (result["run_id"],))
-            connection.execute("DELETE FROM simulation_runs WHERE run_id = ?", (result["run_id"],))
-            connection.execute("INSERT INTO simulation_runs(run_id,config_path,seed,days,policy,allocation_rule,operating_result) VALUES(?,?,?,?,?,?,?)",
-                (result["run_id"], str(settings.config_path), settings.seed, settings.days, result["policy"], result["allocation_rule"], result["operating_result"]))
-            rows = [r for r in daily_rows if r["run_id"] == result["run_id"]]
-            connection.executemany("INSERT INTO daily_simulation_results VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                [(r["run_id"], r["day"], r["product_id"], r["stock_start"], r["demand"], r["units_sold"], r["lost_sales"], r["order_quantity"], r["stock_end"], r["revenue"], r["cogs"], r["holding_cost"], r["ordering_cost"]) for r in rows])
-    return daily_rows, aggregate_rows
+def allocate_capacity(requested: np.ndarray, free_capacity: int, priority: list[int]) -> np.ndarray:
+    """Cut orders down so they fit in the free space.
+
+    Products are served in priority order. Each gets its full request if it fits,
+    otherwise whatever space is left. Nobody gets more than they asked for.
+    """
+    allocated = np.zeros_like(requested)
+    remaining = free_capacity
+    for i in priority:
+        allocated[i] = min(int(requested[i]), remaining)
+        remaining -= allocated[i]
+    return allocated
+
+
+class SimulationResult:
+    """What happened in one simulation run, as (days, products) arrays.
+
+    Quantities come from the engine; the money arrays are worked out here, in cents.
+    """
+
+    def __init__(
+        self,
+        catalogue: Catalogue,
+        demand: np.ndarray,
+        stock_start: np.ndarray,
+        units_sold: np.ndarray,
+        stock_end: np.ndarray,
+        orders: np.ndarray,
+        holding_cost_cents: int,
+        order_cost_cents: int,
+    ) -> None:
+        self.demand = demand
+        self.stock_start = stock_start
+        self.units_sold = units_sold
+        self.stock_end = stock_end
+        self.orders = orders
+        self.lost_sales = demand - units_sold
+
+        # (days, products) * (products,) broadcasts the price vector over every day.
+        self.revenue_cents = units_sold * catalogue.price_cents
+        self.cogs_cents = units_sold * catalogue.cost_cents
+        self.holding_cost_cents = stock_end * holding_cost_cents
+        # One fixed fee per product order; no fee on days with nothing ordered.
+        self.ordering_cost_cents = (orders > 0).astype(np.int64) * order_cost_cents
+        self.operating_result_cents = (
+            self.revenue_cents - self.cogs_cents
+            - self.holding_cost_cents - self.ordering_cost_cents
+        )
+
+    def total_operating_result_cents(self) -> int:
+        return int(self.operating_result_cents.sum())
+
+
+def simulate(
+    catalogue: Catalogue,
+    demand: np.ndarray,
+    policy: ReplenishmentPolicy,
+    holding_cost_cents: int,
+    order_cost_cents: int,
+    storage: StorageLimit | None = None,
+) -> SimulationResult:
+    """Run one replenishment policy against a fixed demand array.
+
+    Each day, in this order:
+      1. receive the orders placed at the end of the previous day
+      2. sell min(demand, stock)
+      3. demand that could not be met is lost for good
+      4. holding cost is charged on end-of-day stock
+      5. the policy places orders, which arrive the next morning
+    Orders placed on the last day stay in `orders` and are reported as outstanding.
+    """
+    demand = np.asarray(demand, dtype=np.int64)
+    days, n_products = demand.shape
+    if n_products != len(catalogue):
+        raise ValueError(f"demand has {n_products} columns but there are {len(catalogue)} products")
+    if (demand < 0).any():
+        raise ValueError("demand must be non-negative")
+
+    priority = None
+    if storage is not None:
+        if catalogue.initial_stock.sum() > storage.capacity:
+            raise ValueError("initial stock exceeds the storage capacity")
+        priority = allocation_priority(catalogue, storage.rule)
+
+    stock_start = np.zeros((days, n_products), dtype=np.int64)
+    units_sold = np.zeros_like(stock_start)
+    stock_end = np.zeros_like(stock_start)
+    orders = np.zeros_like(stock_start)
+
+    stock = catalogue.initial_stock.copy()
+    arriving = np.zeros(n_products, dtype=np.int64)  # nothing is on order on day 1
+
+    for day in range(days):
+        stock = stock + arriving                          # 1
+        stock_start[day] = stock
+        units_sold[day] = np.minimum(demand[day], stock)  # 2 (3: the rest is lost)
+        stock = stock - units_sold[day]
+        stock_end[day] = stock                            # 4: costed in SimulationResult
+
+        requested = policy.order_quantities(stock)        # 5
+        if storage is not None:
+            # Everything ordered today arrives tomorrow morning, before any sales,
+            # so it has to fit next to the stock we already hold.
+            free_capacity = storage.capacity - int(stock.sum())
+            requested = allocate_capacity(requested, free_capacity, priority)
+        orders[day] = requested
+        arriving = requested
+
+    return SimulationResult(catalogue, demand, stock_start, units_sold, stock_end, orders,
+                            holding_cost_cents, order_cost_cents)

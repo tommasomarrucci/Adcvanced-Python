@@ -1,0 +1,6 @@
+VALIDATION FAILED
+
+Configuration: /Users/tommasomarrucci/Desktop/BOCCONI/3rd year/Advanced Python/Project/inventory_student_sample_files/validation/invalid_config.toml
+
+1 problem(s) found. Nothing was imported or simulated.
+- configuration: [simulation] days must be positive, got 0

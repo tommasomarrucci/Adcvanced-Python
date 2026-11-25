@@ -1,5 +1,5 @@
-run_id,policy,allocation_rule,revenue,cogs,gross_profit,holding_cost,ordering_cost,operating_result,units_sold,lost_sales,demand,fulfilment_rate,final_stock,outstanding_orders,final_inventory_value
-2026-fixed_quantity-product_id_ascending-9c036653,fixed_quantity,product_id_ascending,5517.699999999999,2363.6999999999985,3153.9999999999995,297.52,86.0,2770.4799999999996,2646.0,9.0,2655.0,0.9966101694915255,263,0,592.3
-2026-fixed_quantity-unit_margin_descending-9c036653,fixed_quantity,unit_margin_descending,5468.5,2347.199999999998,3121.3,299.94,83.0,2738.36,2565.0,90.0,2655.0,0.9661016949152542,275,25,740.5
-2026-order_up_to-product_id_ascending-9c036653,order_up_to,product_id_ascending,5511.099999999999,2360.999999999998,3150.0999999999995,304.10000000000025,71.0,2774.999999999999,2640.0,15.0,2655.0,0.9943502824858758,263,0,568.8
-2026-order_up_to-unit_margin_descending-9c036653,order_up_to,unit_margin_descending,5409.300000000001,2325.6999999999985,3083.6000000000004,304.76000000000033,68.0,2710.84,2484.0,171.0,2655.0,0.9355932203389831,263,37,532.4
+run_id,policy,policy_parameters,allocation_rule,demand,units_sold,lost_sales,fulfilment_rate,revenue_eur,cogs_eur,gross_profit_eur,holding_cost_eur,ordering_cost_eur,operating_result_eur,final_stock,final_inventory_value_eur,outstanding_orders,gap_to_best_eur
+storage-seed2026-fixed_quantity-product_id_ascending,fixed_quantity,"{""threshold"": 20, ""quantity"": 40}",product_id_ascending,2655,2646,9,0.9966,5517.70,2363.70,3154.00,297.52,86.00,2770.48,263,592.30,0,4.52
+storage-seed2026-fixed_quantity-unit_margin_descending,fixed_quantity,"{""threshold"": 20, ""quantity"": 40}",unit_margin_descending,2655,2565,90,0.9661,5468.50,2347.20,3121.30,299.94,83.00,2738.36,275,740.50,25,36.64
+storage-seed2026-order_up_to-product_id_ascending,order_up_to,"{""threshold"": 20, ""target"": 60}",product_id_ascending,2655,2640,15,0.9944,5511.10,2361.00,3150.10,304.10,71.00,2775.00,263,568.80,0,0.00
+storage-seed2026-order_up_to-unit_margin_descending,order_up_to,"{""threshold"": 20, ""target"": 60}",unit_margin_descending,2655,2484,171,0.9356,5409.30,2325.70,3083.60,304.76,68.00,2710.84,263,532.40,37,64.16

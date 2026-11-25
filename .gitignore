@@ -2,3 +2,5 @@
 __pycache__/
 *.py[cod]
 inventory_student_sample_files/working/
+.DS_Store
+Slides/

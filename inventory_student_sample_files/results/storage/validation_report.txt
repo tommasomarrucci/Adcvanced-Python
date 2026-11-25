@@ -1,2 +1,13 @@
 VALIDATION PASSED
-No input problems found.
+
+Configuration: /Users/tommasomarrucci/Desktop/BOCCONI/3rd year/Advanced Python/Project/inventory_student_sample_files/config/storage.toml
+Products file: /Users/tommasomarrucci/Desktop/BOCCONI/3rd year/Advanced Python/Project/inventory_student_sample_files/data/products.csv
+Sales file:    /Users/tommasomarrucci/Desktop/BOCCONI/3rd year/Advanced Python/Project/inventory_student_sample_files/data/historical_sales.csv
+
+Checks: required columns; unique, non-empty product ids; positive costs and
+prices with at most two decimals; non-negative integer stock and units;
+YYYY-MM-DD dates; known products; one row per product and day; a complete,
+consecutive history of at least 30 days; no conflicts with sales already stored;
+initial stock within storage capacity (storage extension only).
+
+No problems found.

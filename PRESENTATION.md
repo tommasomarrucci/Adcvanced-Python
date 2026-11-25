@@ -88,7 +88,7 @@ In un testo più piccolo, ma leggibile:
 
 > La configurazione TOML definisce percorsi, orizzonte, seed, costi, soglie e capacità. Prima della simulazione validiamo prodotti e storico: ogni prodotto deve avere una registrazione per ogni data e i valori devono rispettare i vincoli. SQLite conserva catalogo, vendite, esecuzioni e risultati giornalieri. Le query SQL producono i riepiloghi storici, inclusi ricavi per categoria e migliori vendite in un intervallo.
 >
-> Per la parte numerica, stimiamo la domanda media giornaliera dai 90 giorni forniti e NumPy genera una matrice di Poisson di 60 righe per 8 prodotti. La scelta importante per il confronto è generare la matrice una sola volta: così ogni politica affronta la stessa domanda e le differenze dipendono dalle decisioni di riordino e dall’allocazione, non dal caso. Il motore applica un’interfaccia comune alle due politiche. Ogni giorno riceve gli ordini del giorno precedente, serve la domanda, calcola le vendite perse, applica i costi e pianifica i nuovi ordini.
+> Per la parte numerica, stimiamo la domanda media giornaliera dai 90 giorni forniti e NumPy genera una matrice di Poisson di 60 righe per 8 prodotti. Il motore lavora sull’intera riga di prodotti ogni giorno, con np.minimum e np.where, e tutti gli importi sono in centesimi interi. La scelta importante per il confronto è generare la matrice una sola volta: così ogni politica affronta la stessa domanda e le differenze dipendono dalle decisioni di riordino e dall’allocazione, non dal caso. Il motore applica un’interfaccia comune alle due politiche. Ogni giorno riceve gli ordini del giorno precedente, serve la domanda, calcola le vendite perse, applica i costi e pianifica i nuovi ordini.
 
 ### Slide 3 — Demo riproducibile
 
@@ -112,7 +112,7 @@ In un angolo scrivi il percorso dei risultati:
 
 **Sequenza demo a schermo:**
 
-1. Mostra il comando `import` e il messaggio `Imported 8 products and 720 sales records`.
+1. Mostra il comando `import` e il messaggio `Validation passed. Imported 8 products; 720 new sales rows, 0 already stored.` Rilancialo una seconda volta: `0 new sales rows, 720 already stored` dimostra che l’import non duplica i dati.
 2. Mostra il comando `summary` e i tre ricavi per categoria: Accessories €2.697,00; Office €1.996,10; Stationery €3.452,50.
 3. Mostra `policy_comparison.csv` e indica le quattro righe di scenario.
 4. Mostra `report.txt` per leggere la raccomandazione e una limitazione.
